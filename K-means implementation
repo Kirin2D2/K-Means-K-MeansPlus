@@ -1,1 +1,142 @@
-#aaa
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.linalg import eigh
+np.random.seed(324)
+
+#squared distance_matrix. compute the distance matrix using vectorization.
+def compute_sq_dists(X, W):
+    '''
+    Inputs:
+    X is a 2-D Numpy array of shape (n, d), each row is a data point
+    W is a 2-D Numpy array of shape (k, d), each row is a cluster centroid
+
+    Output:
+    2-D Numpy array of shape (n, k) where the i,j-th entry represents the squared euclidean distance
+    from the ith row of X to the jth row of W.
+    '''
+
+    W_transpose = np.transpose(W)
+    sq_dists = np.sum(np.square(X), axis=1, keepdims=True) + np.transpose(np.sum(np.square(W), axis=1, keepdims=True)) - 2 * X @ W_transpose
+
+    return sq_dists
+
+#computing the means of our most recent clusters
+def update_centroids(X, k, assoc):
+    '''
+    Inputs:
+    X is a 2-D Numpy array of shape (n, d), each row is a data point
+    k is the number of clusters
+    assoc is a 1-D array of size n indicating the center closest to each point
+
+    Output:
+    A 2-D array of cluster centroids size (k,d), where each row is a centroid.
+    If there are no points associated with a cluster, this should return
+    all zeros for that row/cluster.
+    '''
+    W = np.zeros((k, X.shape[1]))
+    cluster_points = np.zeros(k)
+
+    for cluster in range(k):
+      indices = np.where(assoc == cluster)[0] #found in https://numpy.org/doc/stable/reference/generated/
+      if len(indices) > 0:
+        W[cluster] = np.mean(X[indices], axis=0)
+
+    return W
+
+#Using the distance matrix find centers associated with each point and compute loss
+def associate_centroids(X, W):
+    '''
+    Inputs:
+    X is a 2-D Numpy array of shape (n, d), each row is a data point
+    W is a 2-D Numpy array of shape (k, d), each row is a cluster centroid
+
+    Output:
+    (loss, assoc) where
+    assoc is a 1-D array of size n indicating the center closest to each point
+    loss is the average loss of the data from those associations.
+    '''
+
+    dists = compute_sq_dists(X, W)
+    assoc = np.argmin(dists, axis=1)
+    loss = np.sum(np.take_along_axis(dists, assoc.reshape(-1, 1), axis=1))
+    loss = loss / X.shape[0]
+
+    return loss, assoc
+
+#random initialization
+def rand_init(X, k):
+    '''
+    Inputs:
+    X is a 2-D Numpy array of shape (n, d), each row is a data point
+    k is the number of clusters
+    Outputs:
+    C a 2-D Numpy array of shape (k, d) of random points at which to initialise centroids
+    '''
+    #choose k random rows of X without replacements
+    C = X[np.random.choice(X.shape[0], size=k, replace=False)]
+    return C
+
+
+#K-means loop
+def k_means(X, k, max_iters=50, eps=1e-5):
+    '''
+    Perform k-means clusting on X using k clusters, running for max_iters loops,
+    and stop early if (previous_loss - current_loss) / current_loss < eps.
+    Early stopping does not occur before epoch 2.
+
+    Output (W, loss): the final centers W and loss is a list containing loss values at each iteration
+    '''
+    W = rand_init(X, k) #initialization
+    previous_loss, assoc = associate_centroids(X, W)
+    loss = [previous_loss]
+
+    for i in range(max_iters - 1): #main loop
+      W = update_centroids(X, k, assoc)
+      current_loss, assoc = associate_centroids(X, W)
+      loss.append(current_loss)
+      if (previous_loss - current_loss) / current_loss < eps:
+        break
+      previous_loss = current_loss
+
+    return W, loss
+
+# Following code provided by Princeton University's COS324 course
+# Purpose:
+# --------
+# Plot d-dimensional sample in 2D with cluster indicators (uses PCA to lower dimension from d to 2)
+#
+# How to call:
+# ------------
+# X is the examples: each row is an example
+# C is a 1-d array of associated centroid index (integers):
+#    Each entry in C corresponds to a row in X, so len(C) = X.shape[0]
+#    OR
+#    C = [] means only data visualization w/o centroids
+#
+#
+# Additional paramters (do not change unless instructed):
+# bb is the bounding box
+# `colors` indicates the colors: the default colors the
+#     first cluster `b` or blue, next cluster `g` or green, etc.
+#
+def plot_sample(X, C, bb=[], ms=10, colors='bgrcmk'):
+
+    if X.shape[1] > 2:
+        raise ValueError(f"X contains {X.shape[1]}-dimensional points. Data must be 2D")
+    if len(C) == 0:
+      C = np.ones(X.shape[0])
+
+    plt.figure(figsize=(12,6))
+    plt.subplot(1,2,1)
+
+    k = int(C.max()) + 1
+    if bb != []:
+        plt.xlim(bb[0]), plt.ylim(bb[1])
+
+    for i in range(k):
+        ind = C == i
+        plt.scatter(X[ind,0], X[ind,1], s=ms, c=colors[i % len(colors)])
+
+    plt.show()
+
+
